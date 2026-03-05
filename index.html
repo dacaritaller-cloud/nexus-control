@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0a1628">
+<title>NEXUS CONTROL v4.0</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/5.3.4/mqtt.min.js?v=4"></script>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:      #0a1628;
+  --surface: #0d2040;
+  --card:    #112850;
+  --border:  #1a4a80;
+  --bhi:     #2a6aaa;
+  --gold:    #f0a832;
+  --warm:    #ff7c3a;
+  --purple:  #c87aff;
+  --white:   #fff4e8;
+  --dim:     #4a88b0;
+  --danger:  #ff3d5a;
+  --text:    #a8d4f0;
+  --green:   #40e0a0;
+  --taller:  #f0a832;
+  --casa:    #40e0a0;
+  --empresa: #c87aff;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font-family: 'Rajdhani', sans-serif; min-height: 100vh; overflow-x: hidden; }
+body::before {
+  content: ''; position: fixed; inset: 0;
+  background: radial-gradient(ellipse at 15% 0%, rgba(240,168,50,.06) 0%, transparent 45%), radial-gradient(ellipse at 85% 100%, rgba(200,122,255,.07) 0%, transparent 45%);
+  pointer-events: none; z-index: 0;
+}
+body::after {
+  content: ''; position: fixed; inset: 0;
+  background-image: linear-gradient(rgba(0,140,255,.04) 1px, transparent 1px), linear-gradient(90deg, rgba(0,140,255,.04) 1px, transparent 1px);
+  background-size: 40px 40px; pointer-events: none; z-index: 0;
+}
+nav {
+  position: sticky; top: 0; z-index: 200;
+  background: rgba(10,22,40,.97); border-bottom: 1px solid var(--border);
+  backdrop-filter: blur(16px); display: flex; align-items: center;
+  padding: 0 16px; height: 54px;
+}
+.nav-logo { font-family: 'Cinzel', serif; font-size: .9rem; letter-spacing: 4px; color: var(--gold); text-shadow: 0 0 20px rgba(240,168,50,.5); margin-right: auto; animation: flicker 10s infinite; }
+@keyframes flicker { 0%,100%{opacity:1} 95%{opacity:.8} 98%{opacity:.9} }
+.status-pill { display: flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 2px; border: 1px solid; font-size: .65rem; font-weight: 600; letter-spacing: 1px; transition: all .4s; }
+.status-pill.connecting { border-color: var(--warm);   color: var(--warm); }
+.status-pill.connected  { border-color: var(--gold);   color: var(--gold); box-shadow: 0 0 8px rgba(240,168,50,.2); }
+.status-pill.offline    { border-color: var(--danger); color: var(--danger); }
+.sdot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+.status-pill.connected .sdot  { animation: pulse 2s infinite; }
+.status-pill.connecting .sdot { animation: pulse .5s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.1} }
+main { position: relative; z-index: 1; padding: 14px; max-width: 720px; margin: 0 auto; }
+.gstats { display: grid; grid-template-columns: repeat(4,1fr); border: 1px solid var(--border); border-radius: 4px; overflow: hidden; background: var(--border); gap: 1px; margin-bottom: 14px; }
+.gstat { background: var(--surface); padding: 10px 8px; text-align: center; }
+.gstat-val { font-family: 'Cinzel', serif; font-size: 1.4rem; color: var(--white); line-height: 1; }
+.gstat-val.gold   { color: var(--gold);   text-shadow: 0 0 12px rgba(240,168,50,.5); }
+.gstat-val.purple { color: var(--purple); text-shadow: 0 0 12px rgba(200,122,255,.4); }
+.gstat-val.green  { color: var(--green);  text-shadow: 0 0 12px rgba(64,224,160,.4); }
+.gstat-lbl { font-size: .56rem; letter-spacing: 2px; color: var(--dim); text-transform: uppercase; margin-top: 2px; }
+.drawer { margin-bottom: 10px; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; transition: box-shadow .3s; }
+.drawer-hdr { display: flex; align-items: center; gap: 10px; padding: 14px 16px; cursor: pointer; background: var(--surface); border-bottom: 1px solid transparent; transition: all .2s; user-select: none; }
+.drawer.open .drawer-hdr { border-bottom-color: var(--border); background: var(--card); }
+.drawer-hdr:hover { background: var(--card); }
+.dv-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; background: var(--dim); transition: all .3s; }
+.dv-dot.offline { background: var(--danger) !important; animation: none !important; }
+.drawer-ttl { font-family: 'Cinzel', serif; font-size: .88rem; letter-spacing: 2px; color: var(--white); flex: 1; }
+.drawer-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; margin-right: 6px; }
+.drawer-sub { font-size: .6rem; color: var(--dim); }
+.drawer-ts  { font-size: .55rem; color: var(--dim); }
+.drawer-arr { font-size: .8rem; color: var(--dim); transition: transform .3s; }
+.drawer.open .drawer-arr { transform: rotate(180deg); }
+.drawer-body { max-height: 0; overflow: hidden; transition: max-height .45s cubic-bezier(.4,0,.2,1); background: var(--card); }
+.drawer.open .drawer-body { max-height: 1400px; }
+.di { padding: 14px; }
+
+/* Taller — gold */
+.drawer[data-dev="taller"] .drawer-ttl { color: var(--taller); }
+.drawer[data-dev="taller"] .dv-dot:not(.offline) { background: var(--taller); animation: pulse 2s infinite; box-shadow: 0 0 8px rgba(240,168,50,.5); }
+.drawer[data-dev="taller"].open { border-color: rgba(240,168,50,.25); box-shadow: 0 6px 30px rgba(240,168,50,.07); }
+.drawer[data-dev="taller"] .zcard.on { border-color: rgba(240,168,50,.4); background: rgba(240,168,50,.05); }
+.drawer[data-dev="taller"] .zcard.on::before { background: linear-gradient(90deg,var(--taller),var(--warm)); box-shadow: 0 0 10px rgba(240,168,50,.5); }
+.drawer[data-dev="taller"] .zcard.on .toggle { background: var(--taller); }
+.drawer[data-dev="taller"] .zcard.on .zcard-name { color: var(--taller); text-shadow: 0 0 8px rgba(240,168,50,.4); }
+.drawer[data-dev="taller"] .zcard.on .zstat-txt { color: var(--taller); }
+/* Casa — green */
+.drawer[data-dev="casa"] .drawer-ttl { color: var(--casa); }
+.drawer[data-dev="casa"] .dv-dot:not(.offline) { background: var(--casa); animation: pulse 2s infinite; box-shadow: 0 0 8px rgba(64,224,160,.5); }
+.drawer[data-dev="casa"].open { border-color: rgba(64,224,160,.25); box-shadow: 0 6px 30px rgba(64,224,160,.07); }
+.drawer[data-dev="casa"] .zcard.on { border-color: rgba(64,224,160,.4); background: rgba(64,224,160,.05); }
+.drawer[data-dev="casa"] .zcard.on::before { background: linear-gradient(90deg,var(--casa),#00c8a0); box-shadow: 0 0 10px rgba(64,224,160,.5); }
+.drawer[data-dev="casa"] .zcard.on .toggle { background: var(--casa); }
+.drawer[data-dev="casa"] .zcard.on .zcard-name { color: var(--casa); text-shadow: 0 0 8px rgba(64,224,160,.4); }
+.drawer[data-dev="casa"] .zcard.on .zstat-txt { color: var(--casa); }
+/* Empresa — purple */
+.drawer[data-dev="empresa"] .drawer-ttl { color: var(--empresa); }
+.drawer[data-dev="empresa"] .dv-dot:not(.offline) { background: var(--empresa); animation: pulse 2s infinite; box-shadow: 0 0 8px rgba(200,122,255,.5); }
+.drawer[data-dev="empresa"].open { border-color: rgba(200,122,255,.25); box-shadow: 0 6px 30px rgba(200,122,255,.07); }
+.drawer[data-dev="empresa"] .zcard.on { border-color: rgba(200,122,255,.4); background: rgba(200,122,255,.05); }
+.drawer[data-dev="empresa"] .zcard.on::before { background: linear-gradient(90deg,var(--empresa),#a050ff); box-shadow: 0 0 10px rgba(200,122,255,.5); }
+.drawer[data-dev="empresa"] .zcard.on .toggle { background: var(--empresa); }
+.drawer[data-dev="empresa"] .zcard.on .zcard-name { color: var(--empresa); text-shadow: 0 0 8px rgba(200,122,255,.4); }
+.drawer[data-dev="empresa"] .zcard.on .zstat-txt { color: var(--empresa); }
+
+.zone-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px,1fr)); gap: 7px; margin-bottom: 12px; }
+.zcard { border: 1px solid var(--border); border-radius: 4px; cursor: pointer; transition: all .2s; position: relative; overflow: hidden; background: var(--surface); user-select: none; }
+.zcard::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: var(--border); transition: all .3s; }
+.zcard:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0,0,0,.3); border-color: var(--bhi); }
+.zcard:active { transform: scale(.97); }
+.zcard-inner { padding: 10px 10px; }
+.zcard-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
+.zcard-id { font-size: .55rem; letter-spacing: 2px; color: var(--dim); font-weight: 600; }
+.toggle { width: 30px; height: 16px; background: var(--border); border-radius: 8px; position: relative; transition: background .3s; }
+.toggle::after { content: ''; position: absolute; top: 2px; left: 2px; width: 10px; height: 10px; border-radius: 50%; background: var(--dim); transition: all .3s; }
+.zcard.on .toggle::after { left: 16px; background: white; }
+.zcard-name { font-family: 'Cinzel', serif; font-size: .85rem; color: var(--white); margin-bottom: 1px; letter-spacing: 1px; transition: color .3s; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.zcard-pin { font-size: .57rem; color: var(--dim); }
+.zcard-foot { display: flex; align-items: center; justify-content: space-between; padding: 5px 10px; border-top: 1px solid var(--border); }
+.ztag { font-size: .54rem; padding: 1px 5px; border-radius: 2px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
+.ztag.relay { background: rgba(255,124,58,.12); color: var(--warm); border: 1px solid rgba(255,124,58,.2); }
+.ztag.led   { background: rgba(200,122,255,.12); color: var(--purple); border: 1px solid rgba(200,122,255,.2); }
+.ztag.out   { background: rgba(74,136,176,.1); color: var(--dim); border: 1px solid rgba(74,136,176,.15); }
+.zstat-txt  { font-size: .6rem; color: var(--dim); font-weight: 600; transition: color .3s; }
+.dev-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+.btn { padding: 7px 13px; border-radius: 3px; cursor: pointer; font-family: 'Rajdhani', sans-serif; font-size: .78rem; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; border: 1px solid var(--border); background: var(--surface); color: var(--text); transition: all .2s; }
+.btn:hover { background: var(--card); color: var(--white); }
+.btn.b-gold   { border-color: rgba(240,168,50,.3);  color: var(--gold); }
+.btn.b-gold:hover   { background: rgba(240,168,50,.08); border-color: var(--gold); }
+.btn.b-green  { border-color: rgba(64,224,160,.3);  color: var(--green); }
+.btn.b-green:hover  { background: rgba(64,224,160,.08); border-color: var(--green); }
+.btn.b-purple { border-color: rgba(200,122,255,.3); color: var(--purple); }
+.btn.b-purple:hover { background: rgba(200,122,255,.08); border-color: var(--purple); }
+.btn.b-red    { border-color: rgba(255,61,90,.3); color: var(--danger); }
+.btn.b-red:hover    { background: rgba(255,61,90,.08); border-color: var(--danger); }
+.slbl { font-size: .56rem; letter-spacing: 3px; color: var(--dim); text-transform: uppercase; margin: 8px 0 6px; display: flex; align-items: center; gap: 8px; }
+.slbl::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+.payload-box { border: 1px solid var(--border); border-radius: 3px; overflow: hidden; }
+.payload-hdr { padding: 5px 10px; background: var(--surface); border-bottom: 1px solid var(--border); font-size: .6rem; color: var(--dim); }
+.payload-topic { font-weight: 700; }
+.payload-body { padding: 8px 10px; font-size: .7rem; color: var(--warm); min-height: 36px; white-space: pre; overflow-x: auto; background: #071220; }
+.log-wrap { border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.log-hdr { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: var(--surface); border-bottom: 1px solid var(--border); cursor: pointer; }
+.log-title { font-family: 'Cinzel', serif; font-size: .75rem; letter-spacing: 2px; color: var(--white); }
+.log-clr { font-size: .6rem; color: var(--dim); cursor: pointer; background: none; border: 1px solid var(--border); padding: 2px 8px; border-radius: 2px; font-family: 'Rajdhani', sans-serif; font-weight: 600; transition: all .2s; }
+.log-clr:hover { color: var(--danger); border-color: var(--danger); }
+.log-body { height: 130px; overflow-y: auto; padding: 8px 12px; font-size: .67rem; line-height: 1.7; background: var(--card); }
+.log-body::-webkit-scrollbar { width: 3px; }
+.log-body::-webkit-scrollbar-thumb { background: var(--border); }
+.le .ts { color: var(--border); margin-right: 6px; }
+.le.in  .msg { color: var(--gold); }
+.le.out .msg { color: var(--warm); }
+.le.sys .msg { color: var(--purple); }
+.le.err .msg { color: var(--danger); }
+@media (max-width: 480px) {
+  .gstats { grid-template-columns: repeat(2,1fr); }
+  .zone-grid { grid-template-columns: repeat(2,1fr); }
+}
+</style>
+</head>
+<body>
+<nav>
+  <span class="nav-logo">✦ NEXUS v4.0</span>
+  <div class="status-pill connecting" id="statusPill">
+    <div class="sdot"></div>
+    <span id="statusText">CONECTANDO</span>
+  </div>
+</nav>
+<main>
+
+  <div class="gstats">
+    <div class="gstat"><div class="gstat-val gold"  id="gOn">0</div><div class="gstat-lbl">Total ON</div></div>
+    <div class="gstat"><div class="gstat-val green" id="gDev">0/3</div><div class="gstat-lbl">Dispositivos</div></div>
+    <div class="gstat"><div class="gstat-val purple" id="gMsg">0</div><div class="gstat-lbl">Mensajes</div></div>
+    <div class="gstat"><div class="gstat-val" id="gLat">—</div><div class="gstat-lbl">Latencia ms</div></div>
+  </div>
+
+  <!-- TALLER -->
+  <div class="drawer open" id="d-taller" data-dev="taller">
+    <div class="drawer-hdr" onclick="toggleDrawer('d-taller')">
+      <div class="dv-dot" id="dot-taller"></div>
+      <span class="drawer-ttl">🔧 TALLER</span>
+      <div class="drawer-meta">
+        <span class="drawer-sub" id="sub-taller">0/8 activas</span>
+        <span class="drawer-ts"  id="ts-taller">Sin datos</span>
+      </div>
+      <span class="drawer-arr">▼</span>
+    </div>
+    <div class="drawer-body"><div class="di">
+      <div class="zone-grid" id="grid-taller"></div>
+      <div class="dev-actions">
+        <button class="btn b-gold"  onclick="devAllOn('taller')">▶ Todas ON</button>
+        <button class="btn b-red"   onclick="devAllOff('taller')">■ Todas OFF</button>
+        <button class="btn b-gold"  onclick="devPing('taller')">◈ Ping</button>
+      </div>
+      <div class="slbl">Último estado recibido</div>
+      <div class="payload-box">
+        <div class="payload-hdr">← <span class="payload-topic" style="color:var(--taller)">nexus/taller/state</span></div>
+        <div class="payload-body" id="pl-taller">// Sin datos...</div>
+      </div>
+    </div></div>
+  </div>
+
+  <!-- CASA -->
+  <div class="drawer open" id="d-casa" data-dev="casa">
+    <div class="drawer-hdr" onclick="toggleDrawer('d-casa')">
+      <div class="dv-dot" id="dot-casa"></div>
+      <span class="drawer-ttl">🏠 CASA</span>
+      <div class="drawer-meta">
+        <span class="drawer-sub" id="sub-casa">0/8 activas</span>
+        <span class="drawer-ts"  id="ts-casa">Sin datos</span>
+      </div>
+      <span class="drawer-arr">▼</span>
+    </div>
+    <div class="drawer-body"><div class="di">
+      <div class="zone-grid" id="grid-casa"></div>
+      <div class="dev-actions">
+        <button class="btn b-green" onclick="devAllOn('casa')">▶ Todas ON</button>
+        <button class="btn b-red"   onclick="devAllOff('casa')">■ Todas OFF</button>
+        <button class="btn b-green" onclick="devPing('casa')">◈ Ping</button>
+      </div>
+      <div class="slbl">Último estado recibido</div>
+      <div class="payload-box">
+        <div class="payload-hdr">← <span class="payload-topic" style="color:var(--casa)">nexus/casa/state</span></div>
+        <div class="payload-body" id="pl-casa">// Sin datos...</div>
+      </div>
+    </div></div>
+  </div>
+
+  <!-- EMPRESA -->
+  <div class="drawer open" id="d-empresa" data-dev="empresa">
+    <div class="drawer-hdr" onclick="toggleDrawer('d-empresa')">
+      <div class="dv-dot" id="dot-empresa"></div>
+      <span class="drawer-ttl">🏢 EMPRESA</span>
+      <div class="drawer-meta">
+        <span class="drawer-sub" id="sub-empresa">0/8 activas</span>
+        <span class="drawer-ts"  id="ts-empresa">Sin datos</span>
+      </div>
+      <span class="drawer-arr">▼</span>
+    </div>
+    <div class="drawer-body"><div class="di">
+      <div class="zone-grid" id="grid-empresa"></div>
+      <div class="dev-actions">
+        <button class="btn b-purple" onclick="devAllOn('empresa')">▶ Todas ON</button>
+        <button class="btn b-red"    onclick="devAllOff('empresa')">■ Todas OFF</button>
+        <button class="btn b-purple" onclick="devPing('empresa')">◈ Ping</button>
+      </div>
+      <div class="slbl">Último estado recibido</div>
+      <div class="payload-box">
+        <div class="payload-hdr">← <span class="payload-topic" style="color:var(--empresa)">nexus/empresa/state</span></div>
+        <div class="payload-body" id="pl-empresa">// Sin datos...</div>
+      </div>
+    </div></div>
+  </div>
+
+
+  <!-- CAMERA BUTTON -->
+  <div style="margin-bottom:10px;border:1px solid rgba(64,224,160,.2);border-radius:6px;overflow:hidden;">
+    <div style="display:flex;align-items:center;gap:10px;padding:13px 16px;background:var(--surface);">
+      <span style="font-size:1rem">📷</span>
+      <span style="font-family:'Cinzel',serif;font-size:.82rem;letter-spacing:2px;color:var(--casa);flex:1">CÁMARA EZVIZ</span>
+      <span style="font-size:.6rem;color:var(--dim)">C1C · BB5904606</span>
+    </div>
+    <div style="padding:14px;background:var(--card);display:flex;flex-direction:column;gap:8px;">
+
+      <!-- Device info -->
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <div style="border:1px solid var(--border);border-radius:3px;padding:5px 10px;font-size:.65rem;color:var(--dim);font-family:'Share Tech Mono',monospace;background:var(--surface);">
+          📡 IP: 192.168.0.219
+        </div>
+        <div style="border:1px solid var(--border);border-radius:3px;padding:5px 10px;font-size:.65rem;color:var(--dim);font-family:'Share Tech Mono',monospace;background:var(--surface);">
+          🌐 Pública: 45.175.20.199
+        </div>
+        <div style="border:1px solid rgba(64,224,160,.2);border-radius:3px;padding:5px 10px;font-size:.65rem;color:var(--casa);background:rgba(64,224,160,.05);">
+          ● WiFi Activa
+        </div>
+      </div>
+
+      <!-- Buttons -->
+      <div style="display:flex;gap:7px;flex-wrap:wrap;">
+        <button onclick="openEZVIZ()" style="padding:9px 16px;border-radius:3px;cursor:pointer;font-family:'Rajdhani',sans-serif;font-size:.82rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;border:1px solid rgba(64,224,160,.3);background:rgba(64,224,160,.08);color:var(--casa);transition:all .2s;"
+          onmouseover="this.style.background='rgba(64,224,160,.15)'" onmouseout="this.style.background='rgba(64,224,160,.08)'">
+          ▶ Ver en App EZVIZ
+        </button>
+        <button onclick="openEZVIZWeb()" style="padding:9px 16px;border-radius:3px;cursor:pointer;font-family:'Rajdhani',sans-serif;font-size:.82rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;border:1px solid rgba(74,136,176,.3);background:var(--surface);color:var(--dim);transition:all .2s;"
+          onmouseover="this.style.color='var(--white)'" onmouseout="this.style.color='var(--dim)'">
+          🌐 Ver en Web
+        </button>
+        <button onclick="copyRTSP()" style="padding:9px 16px;border-radius:3px;cursor:pointer;font-family:'Rajdhani',sans-serif;font-size:.82rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;border:1px solid rgba(74,136,176,.3);background:var(--surface);color:var(--dim);transition:all .2s;"
+          onmouseover="this.style.color='var(--white)'" onmouseout="this.style.color='var(--dim)'" id="rtspBtn">
+          📋 Copiar RTSP
+        </button>
+      </div>
+
+      <!-- RTSP info -->
+      <div style="border:1px solid var(--border);border-radius:3px;padding:8px 12px;background:#071220;font-family:'Share Tech Mono',monospace;font-size:.65rem;color:var(--warm);word-break:break-all;">
+        rtsp://admin:<a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="da89bba8bba3eaefe8ed9aebe3e8f4ebece2f4eaf4e8ebe3">[email&#160;protected]</a>:554/h264/ch1/main/av_stream
+      </div>
+      <div style="font-size:.6rem;color:var(--dim);letter-spacing:1px;">
+        ⚠ RTSP disponible solo en red local · Para ver desde internet usa la app EZVIZ
+      </div>
+    </div>
+  </div>
+
+  <!-- LOG -->
+  <div class="log-wrap">
+    <div class="log-hdr">
+      <span class="log-title">📋 LOG GLOBAL</span>
+      <button class="log-clr" onclick="clearLog()">LIMPIAR</button>
+    </div>
+    <div class="log-body" id="logBody"></div>
+  </div>
+
+</main>
+<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
+const MQTT_BROKERS = [
+  'wss://broker.emqx.io:8084/mqtt',
+  'wss://broker.hivemq.com:8884/mqtt',
+  'wss://mqtt.eclipseprojects.io:443/mqtt',
+];
+let brokerIndex = 0;
+let MQTT_HOST = MQTT_BROKERS[brokerIndex];
+const CLIENT_ID = 'nexus-web-' + Math.random().toString(16).slice(2,8);
+
+const DEVICES = {
+  taller:  { topics: { cmd:'nexus/taller/cmd',  state:'nexus/taller/state',  ping:'nexus/taller/ping',  pong:'nexus/taller/pong'  } },
+  casa:    { topics: { cmd:'nexus/casa/cmd',    state:'nexus/casa/state',    ping:'nexus/casa/ping',    pong:'nexus/casa/pong'    } },
+  empresa: { topics: { cmd:'nexus/empresa/cmd', state:'nexus/empresa/state', ping:'nexus/empresa/ping', pong:'nexus/empresa/pong' } },
+};
+
+const ZONE_DEFS = [
+  { id:0, name:'LED',    pin:'GPIO2',  type:'led'   },
+  { id:1, name:'RELE 1', pin:'GPIO5',  type:'relay' },
+  { id:2, name:'RELE 2', pin:'GPIO4',  type:'relay' },
+  { id:3, name:'RELE 3', pin:'GPIO14', type:'relay' },
+  { id:4, name:'RELE 4', pin:'GPIO12', type:'relay' },
+  { id:5, name:'ZONA 5', pin:'GPIO13', type:'out'   },
+  { id:6, name:'ZONA 6', pin:'GPIO0',  type:'out'   },
+  { id:7, name:'ZONA 7', pin:'GPIO15', type:'out'   },
+];
+
+let devStates  = { taller: new Array(8).fill(false), casa: new Array(8).fill(false), empresa: new Array(8).fill(false) };
+let devOnline  = { taller: false, casa: false, empresa: false };
+let pingTimes  = {}, heartbeatTimers = {}, lastMsgTimes = {};
+let msgCount = 0, client = null;
+
+// Build zone cards for each device
+Object.keys(DEVICES).forEach(devId => {
+  const grid = document.getElementById('grid-'+devId);
+  ZONE_DEFS.forEach(z => {
+    const c = document.createElement('div');
+    c.className = 'zcard'; c.id = devId+'-z-'+z.id;
+    c.innerHTML = `
+      <div class="zcard-inner">
+        <div class="zcard-top"><div class="zcard-id">Z·${String(z.id).padStart(2,'0')}</div><div class="toggle"></div></div>
+        <div class="zcard-name">${z.name}</div>
+        <div class="zcard-pin">${z.pin}</div>
+      </div>
+      <div class="zcard-foot">
+        <span class="ztag ${z.type}">${z.type.toUpperCase()}</span>
+        <span class="zstat-txt" id="${devId}-zt-${z.id}">OFF</span>
+      </div>`;
+    c.addEventListener('click', () => sendCmd(devId, z.id, 'toggle'));
+    grid.appendChild(c);
+  });
+});
+
+function toggleDrawer(id) { document.getElementById(id).classList.toggle('open'); }
+
+function connect() {
+  setStatus('connecting'); log('sys','Conectando broker...');
+  client = mqtt.connect(MQTT_HOST, { clientId: CLIENT_ID, clean: true, reconnectPeriod: 3000, connectTimeout: 8000, keepalive: 30 });
+  client.on('connect', () => {
+    setStatus('connected'); log('sys','✓ Conectado');
+    Object.values(DEVICES).forEach(d => { client.subscribe(d.topics.state); client.subscribe(d.topics.pong); });
+    startWatchers();
+  });
+  client.on('message', (topic, payload) => {
+    const raw = payload.toString(); msgCount++;
+    document.getElementById('gMsg').textContent = msgCount;
+    const devId = Object.keys(DEVICES).find(d => topic===DEVICES[d].topics.state || topic===DEVICES[d].topics.pong);
+    if (!devId) return;
+    lastMsgTimes[devId] = Date.now();
+    log('in','['+devId+'] '+raw.substring(0,55)+(raw.length>55?'...':''));
+    if (topic === DEVICES[devId].topics.pong) {
+      const lat = Date.now()-(pingTimes[devId]||Date.now());
+      document.getElementById('gLat').textContent = lat;
+      log('sys','◈ Pong '+devId+' '+lat+'ms'); return;
+    }
+    if (topic === DEVICES[devId].topics.state) {
+      try {
+        const data = JSON.parse(raw);
+        document.getElementById('pl-'+devId).textContent = JSON.stringify(data,null,2);
+        if (!devOnline[devId]) { devOnline[devId]=true; setDot(devId,true); updateGStats(); }
+        if (data.zones) { data.zones.forEach((v,i) => { if(i<8) updateZone(devId,i,v===1); }); updateDevStat(devId); }
+      } catch(e) { log('err','JSON '+devId+': '+e.message); }
+    }
+  });
+  client.on('error',     e => log('err',e.message));
+  client.on('offline',   () => { setStatus('offline'); log('err','Offline'); Object.keys(devOnline).forEach(d=>{devOnline[d]=false;setDot(d,false);}); updateGStats(); });
+  client.on('reconnect', () => { setStatus('connecting'); log('sys','Reconectando...'); });
+  client.on('close',     () => { 
+    setStatus('offline');
+    // Try next broker after 5 seconds
+    setTimeout(() => {
+      brokerIndex = (brokerIndex + 1) % MQTT_BROKERS.length;
+      MQTT_HOST = MQTT_BROKERS[brokerIndex];
+      log('sys', 'Probando broker: ' + MQTT_HOST);
+      connect();
+    }, 5000);
+  });
+}
+
+function startWatchers() {
+  Object.keys(DEVICES).forEach(devId => {
+    clearInterval(heartbeatTimers[devId]);
+    heartbeatTimers[devId] = setInterval(() => {
+      const t = lastMsgTimes[devId];
+      if (!t) return;
+      const s = Math.round((Date.now()-t)/1000);
+      document.getElementById('ts-'+devId).textContent = 'hace '+s+'s';
+      if (s>45 && devOnline[devId]) { devOnline[devId]=false; setDot(devId,false); updateGStats(); log('err','⚠ '+devId+' sin respuesta'); }
+    }, 5000);
+  });
+}
+
+function sendCmd(devId, zone, action) {
+  if (!client?.connected) { log('err','Sin conexión'); return; }
+  const pl = JSON.stringify({zone,action});
+  client.publish(DEVICES[devId].topics.cmd, pl);
+  log('out','['+devId+'] cmd z'+zone+' '+action);
+}
+function devAllOn(d)  { for(let i=0;i<8;i++) sendCmd(d,i,'on');  }
+function devAllOff(d) { for(let i=0;i<8;i++) sendCmd(d,i,'off'); }
+function devPing(d) {
+  if (!client?.connected) return;
+  pingTimes[d] = Date.now(); client.publish(DEVICES[d].topics.ping,'ping');
+  log('out','['+d+'] ping');
+}
+
+function updateZone(devId,i,on) {
+  devStates[devId][i]=on;
+  const card=document.getElementById(devId+'-z-'+i), txt=document.getElementById(devId+'-zt-'+i);
+  if(card) card.classList.toggle('on',on);
+  if(txt)  txt.textContent=on?'ON':'OFF';
+}
+function updateDevStat(devId) {
+  const on=devStates[devId].filter(Boolean).length;
+  document.getElementById('sub-'+devId).textContent=on+'/8 activas';
+  updateGStats();
+}
+function updateGStats() {
+  document.getElementById('gOn').textContent  = Object.values(devStates).flat().filter(Boolean).length;
+  document.getElementById('gDev').textContent = Object.values(devOnline).filter(Boolean).length+'/3';
+}
+function setDot(devId,online) {
+  const dot=document.getElementById('dot-'+devId);
+  if(dot) dot.className='dv-dot'+(online?'':' offline');
+}
+function setStatus(s) {
+  document.getElementById('statusPill').className='status-pill '+s;
+  document.getElementById('statusText').textContent={connecting:'CONECTANDO',connected:'EN LÍNEA',offline:'OFFLINE'}[s]||s.toUpperCase();
+}
+function log(type,msg) {
+  const body=document.getElementById('logBody');
+  const now=new Date(), ts=[now.getHours(),now.getMinutes(),now.getSeconds()].map(n=>String(n).padStart(2,'0')).join(':');
+  const el=document.createElement('div'); el.className='le '+type;
+  el.innerHTML=`<span class="ts">[${ts}]</span><span class="msg">${msg}</span>`;
+  body.appendChild(el); body.scrollTop=body.scrollHeight;
+  while(body.children.length>150) body.removeChild(body.firstChild);
+}
+
+function openEZVIZ() {
+  const isAndroid = /android/i.test(navigator.userAgent);
+  const isIOS = /iphone|ipad/i.test(navigator.userAgent);
+  if(isAndroid) {
+    // Android: intent directo a la camara
+    window.location.href = 'intent://device/live?deviceSerial=BB5904606#Intent;scheme=ezvizlife;package=com.ezviz;end';
+    setTimeout(()=> window.open('https://play.google.com/store/apps/details?id=com.ezviz','_blank'), 2500);
+  } else if(isIOS) {
+    // iOS: deep link directo
+    window.location.href = 'ezvizlife://open/deviceLive?deviceSerial=BB5904606';
+    setTimeout(()=> window.open('https://apps.apple.com/app/ezviz/id1084535512','_blank'), 2500);
+  } else {
+    // PC: abrir web con login
+    window.open('https://www.ezvizlife.com/home','_blank');
+  }
+}
+function openEZVIZWeb() {
+  window.open('https://www.ezvizlife.com/home','_blank');
+}
+function copyRTSP() {
+  const rtsp = 'rtsp://admin:Saray0527@192.168.0.219:554/h264/ch1/main/av_stream';
+  navigator.clipboard.writeText(rtsp).then(()=>{
+    const btn = document.getElementById('rtspBtn');
+    btn.textConte
